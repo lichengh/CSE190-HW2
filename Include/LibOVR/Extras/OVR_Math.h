@@ -1,7 +1,7 @@
 /********************************************************************************/ /**
  \file      OVR_Math.h
  \brief     Implementation of 3D primitives such as vectors, matrices.
- \copyright Copyright 2014-2016 Oculus VR, LLC All Rights reserved.
+ \copyright Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
  *************************************************************************************/
 
 #ifndef OVR_Math_h
@@ -1331,6 +1331,120 @@ typedef Size<int> Sizei;
 typedef Size<unsigned> Sizeu;
 typedef Size<float> Sizef;
 typedef Size<double> Sized;
+
+//-------------------------------------------------------------------------------------
+// ***** Size3
+
+// Size3 class represents 3D size with Width, Height, Depth components.
+// Used to describe distentions of render targets, etc.
+
+template <class T>
+class Size3 {
+ public:
+  T w, h, d;
+
+  Size3() : w(0), h(0), d(0) {}
+  Size3(T w_, T h_, T d_) : w(w_), h(h_), d(d_) {}
+  explicit Size3(T s) : w(s), h(s), d(s) {}
+  explicit Size3(const Size<typename Math<T>::OtherFloatType>& src)
+      : w((T)src.w), h((T)src.h), d((T)1) {}
+  explicit Size3(const Size3<typename Math<T>::OtherFloatType>& src)
+      : w((T)src.w), h((T)src.h), d((T)src.d) {}
+
+  // C-interop support.
+  typedef typename CompatibleTypes<Size3<T>>::Type CompatibleType;
+
+  Size3(const CompatibleType& s) : w(s.w), h(s.h), d(s.d) {}
+
+  operator const CompatibleType&() const {
+    OVR_MATH_STATIC_ASSERT(sizeof(Size3<T>) == sizeof(CompatibleType), "sizeof(Size3<T>) failure");
+    return reinterpret_cast<const CompatibleType&>(*this);
+  }
+
+  bool operator==(const Size3& b) const {
+    return w == b.w && h == b.h && d == b.d;
+  }
+  bool operator!=(const Size3& b) const {
+    return w != b.w || h != b.h || d != b.d;
+  }
+
+  Size3 operator+(const Size3& b) const {
+    return Size3(w + b.w, h + b.h, d + b.d);
+  }
+  Size3& operator+=(const Size3& b) {
+    w += b.w;
+    h += b.h;
+    d += b.d;
+    return *this;
+  }
+  Size3 operator-(const Size3& b) const {
+    return Size3(w - b.w, h - b.h, d - b.d);
+  }
+  Size3& operator-=(const Size3& b) {
+    w -= b.w;
+    h -= b.h;
+    d -= b.d;
+    return *this;
+  }
+  Size3 operator-() const {
+    return Size3(-w, -h, -d);
+  }
+  Size3 operator*(const Size3& b) const {
+    return Size3(w * b.w, h * b.h, d * b.d);
+  }
+  Size3& operator*=(const Size3& b) {
+    w *= b.w;
+    h *= b.h;
+    d *= b.d;
+    return *this;
+  }
+  Size3 operator/(const Size3& b) const {
+    return Size3(w / b.w, h / b.h, d / b.d);
+  }
+  Size3& operator/=(const Size3& b) {
+    w /= b.w;
+    h /= b.h;
+    d /= b.d;
+    return *this;
+  }
+
+  // Scalar multiplication/division scales both components.
+  Size3 operator*(T s) const {
+    return Size3(w * s, h * s, d * s);
+  }
+  Size3& operator*=(T s) {
+    w *= s;
+    h *= s;
+    d *= s;
+    return *this;
+  }
+  Size3 operator/(T s) const {
+    return Size3(w / s, h / s, d / s);
+  }
+  Size3& operator/=(T s) {
+    w /= s;
+    h /= s;
+    d /= s;
+    return *this;
+  }
+
+  static Size3 Min(const Size3& a, const Size3& b) {
+    return Size3((a.w < b.w) ? a.w : b.w, (a.h < b.h) ? a.h : b.h, (a.d < b.d) ? a.d : b.d);
+  }
+  static Size3 Max(const Size3& a, const Size3& b) {
+    return Size3((a.w > b.w) ? a.w : b.w, (a.h > b.h) ? a.h : b.h, (a.d > b.d) ? a.d : b.d);
+  }
+
+  T Volume() const {
+    return w * h * d;
+  }
+
+  inline Vector3<T> ToVector() const {
+    return Vector3<T>(w, h, d);
+  }
+};
+
+typedef Size3<unsigned> Size3u;
 
 //-----------------------------------------------------------------------------------
 // ***** Rect
@@ -4156,15 +4270,55 @@ typedef Plane<float> Planef;
 typedef Plane<double> Planed;
 
 //-----------------------------------------------------------------------------------
-// ***** ScaleAndOffset2D
+// ***** ScaleAndOffset
 
-struct ScaleAndOffset2D {
-  Vector2f Scale;
-  Vector2f Offset;
+template <class T>
+struct ScaleAndOffset {
+  T Scale;
+  T Offset;
 
-  ScaleAndOffset2D(float sx = 0.0f, float sy = 0.0f, float ox = 0.0f, float oy = 0.0f)
+  ScaleAndOffset(float sx = 0.0f, float sy = 0.0f, float ox = 0.0f, float oy = 0.0f)
       : Scale(sx, sy), Offset(ox, oy) {}
+
+  T ApplyTo(const T& input) const {
+    return input * Scale + Offset;
+  }
+
+  ScaleAndOffset Invert() const {
+    ScaleAndOffset inverted;
+    inverted.Scale = T(1.0f) / this->Scale;
+    inverted.Offset = -(this->Offset) * inverted.Scale;
+    return inverted;
+  }
+
+  // nextSO is the other scale-offset operation that would have normally followed this scale-offset.
+  // Result is a single scale-offset operation that can be applied to an input instead of
+  // two or more separate scale-offset applications on a given Vector2f input.
+  //
+  // So this:
+  //  ScaleAndOffset2D so1, so2, so3; // initialized to some values
+  //  Vector2f input = Vector2f(2.0f, -1.0f);
+  //  input = so1.ApplyTo(input);
+  //  input = so2.ApplyTo(input);
+  //  input = so3.ApplyTo(input);
+  //
+  // equals this:
+  //  ScaleAndOffset2D so1, so2, so3; // initialized to some values
+  //  so1 = so1.Combine(so2);
+  //  so1 = so1.Combine(so3);
+  //  Vector2f input = Vector2f(2.0f, -1.0f);
+  //  input = so1.ApplyTo(input);
+  //
+  ScaleAndOffset Combine(const ScaleAndOffset& nextSO) const {
+    ScaleAndOffset retValSO;
+    retValSO.Offset = this->Offset * nextSO.Scale + nextSO.Offset;
+    retValSO.Scale = nextSO.Scale * this->Scale;
+    return retValSO;
+  }
 };
+
+typedef ScaleAndOffset<Vector2f> ScaleAndOffset2D;
+typedef ScaleAndOffset<Vector3f> ScaleAndOffset3D;
 
 //-----------------------------------------------------------------------------------
 // ***** FovPort
@@ -4310,6 +4464,24 @@ struct FovPort {
     uncantedFov.RightTan = OVRMath_Max(-rightDown.x, -rightUp.x);
 
     return uncantedFov;
+  }
+
+  // Widens a given FovPort by specified angle in each direction
+  static FovPort Expand(const FovPort& inFov, float expandAngle) {
+    auto ClampedExpand = [expandAngle](float t) -> float {
+      // We don't want gigantic values coming out of this function, so we limit resulting FOV.
+      // Limit before calling tanf() to avoid wrap around to negative values.
+      const float limitFov = atanf(10.0f);
+      return tanf(OVRMath_Min(OVRMath_Max(atanf(t) + expandAngle, -limitFov), limitFov));
+    };
+
+    FovPort modFov = FovPort(
+        ClampedExpand(inFov.UpTan),
+        ClampedExpand(inFov.DownTan),
+        ClampedExpand(inFov.LeftTan),
+        ClampedExpand(inFov.RightTan));
+
+    return modFov;
   }
 
   template <class T>

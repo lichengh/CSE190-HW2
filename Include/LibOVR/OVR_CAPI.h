@@ -1,7 +1,7 @@
 /************************************************************************************
  \file      OVR_CAPI.h
  \brief     C Interface to the Oculus PC SDK tracking and rendering library.
- \copyright Copyright 2014 Oculus VR, LLC All Rights reserved.
+ \copyright Copyright (c) Facebook Technologies, LLC and its affiliates. All rights reserved.
  ************************************************************************************/
 
 // We don't use version numbers within OVR_CAPI_h, as all versioned variations
@@ -16,6 +16,7 @@
 #if !defined(_WIN32)
 #include <sys/types.h>
 #endif
+
 
 
 #include <stdint.h>
@@ -218,6 +219,17 @@
 #endif
 #endif
 
+// OVR_STATIC_ASSERT_OFFSETOF statically asserts offsetof(Type.member) == expected_offset
+#define OVR_STATIC_ASSERT_OFFSETOF(Type, member, expected_offset) \
+  OVR_STATIC_ASSERT(                                              \
+      offsetof(Type, member) == (expected_offset),                \
+      "Expected " #Type "." #member " offset == " #expected_offset)
+
+// OVR_STATIC_ASSERT_SIZEOF statically asserts sizeof(Type) == expected_size
+#define OVR_STATIC_ASSERT_SIZEOF(Type, expected_size) \
+  OVR_STATIC_ASSERT(                                  \
+      sizeof(Type) == (expected_size), "Expected sizeof(" #Type ") == " #expected_size)
+
 //-----------------------------------------------------------------------------------
 // ***** Padding
 //
@@ -304,6 +316,11 @@ typedef struct OVR_ALIGNAS(4) ovrVector2f_ {
 typedef struct OVR_ALIGNAS(4) ovrVector3f_ {
   float x, y, z;
 } ovrVector3f;
+
+/// A 4D vector with float components.
+typedef struct OVR_ALIGNAS(4) ovrVector4f_ {
+  float x, y, z, w;
+} ovrVector4f;
 
 /// A 4x4 matrix with float elements.
 typedef struct OVR_ALIGNAS(4) ovrMatrix4f_ {
@@ -661,6 +678,7 @@ typedef enum ovrTextureBindFlags_ {
   /// This flag cannot be combined with ovrTextureBind_DX_RenderTarget.
   ovrTextureBind_DX_DepthStencil = 0x0004,
 
+
   ovrTextureBind_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
 } ovrTextureBindFlags;
 
@@ -681,7 +699,7 @@ typedef enum ovrTextureFormat_ {
   OVR_FORMAT_B8G8R8X8_UNORM = 8, ///< Not supported for OpenGL applications
   OVR_FORMAT_B8G8R8X8_UNORM_SRGB = 9, ///< Not supported for OpenGL applications
   OVR_FORMAT_R16G16B16A16_FLOAT = 10,
-  OVR_FORMAT_R11G11B10_FLOAT = 25, ///< Introduced in v1.10
+  OVR_FORMAT_R11G11B10_FLOAT = 25, ///< Not supported for D3D12 applications. Introduced in v1.10
 
   // Depth formats
   OVR_FORMAT_D16_UNORM = 11,
@@ -702,6 +720,7 @@ typedef enum ovrTextureFormat_ {
   OVR_FORMAT_BC7_UNORM_SRGB = 24,
 
 
+  OVR_FORMAT_LAST,
   OVR_FORMAT_ENUMSIZE = 0x7fffffff ///< \internal Force type int32_t.
 } ovrTextureFormat;
 
@@ -733,6 +752,7 @@ typedef enum ovrTextureMiscFlags_ {
   /// Not supported for depth or compressed (BC) formats.
   ovrTextureMisc_AutoGenerateMips = 0x0008,
 
+
   ovrTextureMisc_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
 } ovrTextureFlags;
 
@@ -742,7 +762,7 @@ typedef enum ovrTextureMiscFlags_ {
 /// \see ovr_CreateTextureSwapChainGL
 ///
 typedef struct ovrTextureSwapChainDesc_ {
-  ovrTextureType Type; ///< Must not be ovrTexture_Window
+  ovrTextureType Type; ///< Must be ovrTexture_2D
   ovrTextureFormat Format;
   int ArraySize; ///< Must be 6 for ovrTexture_Cube, 1 for other types.
   int Width;
@@ -785,6 +805,11 @@ typedef enum ovrMirrorOptions_ {
   /// Shows the system menu (triggered by hitting the Home button) on the mirror texture
   ovrMirrorOption_IncludeSystemGui = 0x0020,
 
+  /// Forces mirror output to use max symmetric FOV instead of asymmetric full FOV used by HMD.
+  /// Only valid for rectilinear mirrors i.e. using ovrMirrorOption_PostDistortion with
+  /// ovrMirrorOption_ForceSymmetricFov will result in ovrError_InvalidParameter error.
+  ovrMirrorOption_ForceSymmetricFov = 0x0040,
+
 
   ovrMirrorOption_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
 } ovrMirrorOptions;
@@ -808,16 +833,117 @@ typedef struct ovrMirrorTextureData* ovrMirrorTexture;
 
 //-----------------------------------------------------------------------------------
 
+/// Fov-stencil mesh for assisting in rendering efficiency for clients using EyeFov layers
+
+/// A fov-stencil mesh is used to cull out the parts of the eye render target used in
+/// ovrLayerType_EyeFov & ovrLayerType_EyeFovDepth layers that would not normally be visible to
+/// the user wearing the HMD.
+///
+/// A rasterized eye render target is rectangular, but the parts of the render target visible to the
+/// user do not necessarily follow a rectangular region. This is where the fov-stencil mesh
+/// helps designate the boundaries of the visible parts for a given eye render target.
+///
+/// To make effective use of this mesh, the client should render the mesh before kicking off any
+/// other rendering work. Ideally the mesh would be rendered at the near-depth plane distance, or
+/// into the stencil buffer right after clearing the depth-stencil buffer. The choice of using
+/// depth vs. stencil is left up to the client, but the client should make sure that the mesh is
+/// rendered in a way that it can make use of Hierarchical-Z or Hierarchical-Stencil for better
+/// performance on rejected geometry post-vertex shading.
+
+/// Viewport stencil types provided by the ovr_GetFovStencil call.
+/// \see ovr_GetFovStencil
+typedef enum ovrFovStencilType_ {
+  ovrFovStencil_HiddenArea = 0, ///< Triangle list covering parts that are hidden to users
+  ovrFovStencil_VisibleArea = 1, ///< Triangle list covering parts that are visible to users
+  ovrFovStencil_BorderLine = 2, ///< Line list that draws the boundary visible to users
+  ovrFovStencil_VisibleRectangle = 3, ///< Axis-aligned rectangle fit in visible region
+                                      ///< 4x vertices: TopLeft, TopRight, BottomRight, BottomLeft
+
+  ovrFovStencilType_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
+} ovrFovStencilType;
+
+/// Identifies flags used by ovrFovStencilDesc and which are passed to ovr_GetFovStencil.
+/// \see ovrFovStencilDesc
+typedef enum ovrFovStencilFlags_ {
+
+  /// When used, flips the Y component of the provided 2D mesh coordinates, such that Y increases
+  /// upwards. When not used, places mesh origin at top-left where Y increases downwards.
+  ovrFovStencilFlag_MeshOriginAtBottomLeft = 0x01,
+
+  ovrFovStencilFlag_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
+} ovrFovStencilFlags;
+
+/// Fov-stencil mesh descriptor passed into the function ovr_GetFovStencil
+/// \see ovr_GetFovStencil
+typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrFovStencilDesc_ {
+  ovrFovStencilType StencilType;
+  uint32_t StencilFlags; ///< Bit flag combination of ovrFovStencilFlags
+  ovrEyeType Eye;
+  ovrFovPort FovPort; ///< Typically FOV obtained from ovrEyeRenderDesc
+  ovrQuatf HmdToEyeRotation; ///< Typically HmdToEyePose.Orientation obtained from ovrEyeRenderDesc
+                             ///< Note: Currently unsupported, always treated as identity
+} ovrFovStencilDesc;
+
+/// Contains the data for the fov-stencil mesh. Parts of the struct are filled by the caller
+/// while some parts are filled by the SDK.
+/// \see ovr_GetFovStencil
+typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrFovStencilMeshBuffer_ {
+  /// Vertex info
+  int AllocVertexCount; ///< To be filled in by caller of ovr_GetFovStencil
+  int UsedVertexCount; ///< To be filled in by SDK and returned to caller
+  ovrVector2f* VertexBuffer; ///< To be allocated by caller and filled in by SDK
+
+  /// Index info
+  int AllocIndexCount; ///< To be filled in by caller of ovr_GetFovStencil
+  int UsedIndexCount; ///< To be filled in by SDK and returned to caller
+  uint16_t* IndexBuffer; ///< To be allocated by caller and filled in by SDK
+} ovrFovStencilMeshBuffer;
+
+/// Returns a viewport stencil mesh to be used for defining the area or outline the user
+/// can see through the lens on an area defined by a given ovrFovPort.
+///
+/// \param[in] session Specifies an ovrSession previously returned by ovr_Create.
+/// \param[in] fovStencilDesc Info provided by caller necessary to generate a stencil mesh.
+/// \param[in] meshBuffer Mesh buffer to be partially filled in and returned by the SDK.
+///
+/// \return Returns an ovrResult indicating success or failure. In the case of
+///         failure, use ovr_GetLastErrorInfo to get more information.
+///         Return values include but aren't limited to:
+///     - ovrSuccess: Completed successfully.
+///     - ovrError_ServiceConnection: The service connection was lost and the application
+///       must destroy the session.
+///     - ovrError_InvalidParameter: One or more of the parameters
+///
+/// To find out how big the vertex and index buffers in meshBuffer buffer should be, first call
+/// this function setting AllocVertexCount & AllocIndexCount to 0 while also sending in nullptr
+/// for VertexBuffer & IndexBuffer. The SDK will populate UsedVertexCount & UsedIndexCount values.
+///
+/// If Alloc*Count fields in meshBuffer are smaller than the expected Used*Count fields,
+/// (except when they are 0) then the SDK will return ovrError_InvalidParameter and leave
+/// VertexBuffer and IndexBuffer untouched.
+///
+/// 2D positions provided in the buffer will be in the [0,1] range where Y increases downward,
+/// similar to texture-UV space. If Y coordinates need to be flipped upside down, use the
+/// ovrFovStencilFlag_MeshOriginAtBottomLeft.
+///
+OVR_PUBLIC_FUNCTION(ovrResult)
+ovr_GetFovStencil(
+    ovrSession session,
+    const ovrFovStencilDesc* fovStencilDesc,
+    ovrFovStencilMeshBuffer* meshBuffer);
+
+//-----------------------------------------------------------------------------------
+
 /// Describes button input types.
 /// Button inputs are combined; that is they will be reported as pressed if they are
 /// pressed on either one of the two devices.
 /// The ovrButton_Up/Down/Left/Right map to both XBox D-Pad and directional buttons.
 /// The ovrButton_Enter and ovrButton_Return map to Start and Back controller buttons, respectively.
 typedef enum ovrButton_ {
-  /// A button on XBox controllers and right Touch controller. Select button on Oculus Remote.
+  /// A button on XBox controllers and right Touch controller. Not present on Oculus Remote.
   ovrButton_A = 0x00000001,
 
-  /// B button on XBox controllers and right Touch controller. Back button on Oculus Remote.
+  /// B button on XBox controllers and right Touch controller. Not present on Oculus Remote.
   ovrButton_B = 0x00000002,
 
   /// Right thumbstick on XBox controllers and Touch controllers. Not present on Oculus Remote.
@@ -852,11 +978,12 @@ typedef enum ovrButton_ {
   ovrButton_Right = 0x00080000,
 
   /// Start on XBox 360 controller. Menu on XBox One controller and Left Touch controller.
+  /// Select button on Oculus Remote.
   /// Should be referred to as the Menu button in user-facing documentation.
   ovrButton_Enter = 0x00100000,
 
-  /// Back on Xbox 360 controller. View button on XBox One controller. Not present on Touch
-  /// controllers or Oculus Remote.
+  /// Back on Xbox 360 controller and Oculus Remote. View button on XBox One controller.
+  /// Not present on Touch controllers.
   ovrButton_Back = 0x00200000,
 
   /// Volume button on Oculus Remote. Not present on XBox or Touch controllers.
@@ -1119,6 +1246,7 @@ typedef struct ovrInputState_ {
   /// -1.0f to 1.0f
   /// No deadzone or filter
   ovrVector2f ThumbstickRaw[ovrHand_Count];
+
 } ovrInputState;
 
 typedef struct ovrCameraIntrinsics_ {
@@ -1244,6 +1372,7 @@ typedef enum ovrInitFlags_ {
 
 
 
+
   /// These bits are writable by user code.
   ovrinit_WritableBits = 0x00ffffff,
 
@@ -1304,9 +1433,11 @@ typedef struct OVR_ALIGNAS(8) ovrInitParams_ {
 
 } ovrInitParams;
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 
 #if !defined(OVR_EXPORTING_CAPI)
 
@@ -1536,6 +1667,7 @@ OVR_PUBLIC_FUNCTION(ovrResult) ovr_Create(ovrSession* pSession, ovrGraphicsLuid*
 ///
 OVR_PUBLIC_FUNCTION(void) ovr_Destroy(ovrSession session);
 
+
 #endif // !defined(OVR_EXPORTING_CAPI)
 
 /// Specifies status information for the current session.
@@ -1570,6 +1702,7 @@ typedef struct ovrSessionStatus_ {
   /// True if a system overlay is present, such as a dashboard. In this case the application
   /// (if visible) should pause while still drawing, avoid drawing near-field graphics so they
   /// don't visually fight with the system overlay, and consume fewer CPU and GPU resources.
+  /// \deprecated Do not use.
   ovrBool OverlayPresent;
 
   /// True if runtime is requesting that the application provide depth buffers with projection
@@ -1811,7 +1944,7 @@ ovr_GetTrackerPose(ovrSession session, unsigned int trackerPoseIndex);
 /// Returns the most recent input state for controllers, without positional tracking info.
 ///
 /// \param[out] inputState Input state that will be filled in.
-/// \param[in] ovrControllerType Specifies which controller the input will be returned for.
+/// \param[in] controllerType Specifies which controller the input will be returned for.
 /// \return Returns ovrSuccess if the new state was successfully obtained.
 ///
 /// \see ovrControllerType
@@ -2039,9 +2172,9 @@ OVR_PUBLIC_FUNCTION(ovrResult) ovr_RequestBoundaryVisible(ovrSession session, ov
 
 /// Returns the number of camera properties of all cameras
 /// \param[in] session Specifies an ovrSession previously returned by ovr_Create.
-/// \param[in out] cameras Pointer to the array. If null and the provided array capacity is
+/// \param[in, out] cameras Pointer to the array. If null and the provided array capacity is
 /// sufficient, will return ovrError_NullArrayPointer.
-/// \param[in out] inoutCameraCount Supply the
+/// \param[in, out] inoutCameraCount Supply the
 /// array capacity, will return the actual # of cameras defined. If *inoutCameraCount is too small,
 /// will return ovrError_InsufficientArraySize.
 /// \return Returns the list of external cameras the system knows about.
@@ -2119,6 +2252,7 @@ typedef enum ovrLayerType_ {
   ovrLayerType_Cube = 10,
 
 
+
   ovrLayerType_EnumSize = 0x7fffffff ///< Force type int32_t.
 
 } ovrLayerType;
@@ -2147,6 +2281,7 @@ typedef enum ovrLayerFlags_ {
   ovrLayerFlag_HeadLocked = 0x04,
 
 
+  ovrLayerFlags_EnumSize = 0x7fffffff ///< \internal Force type int32_t.
 } ovrLayerFlags;
 
 /// Defines properties shared by all ovrLayer structs, such as ovrLayerEyeFov.
@@ -2156,10 +2291,13 @@ typedef enum ovrLayerFlags_ {
 ///
 /// \see ovrLayerType, ovrLayerFlags
 ///
-typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerHeader_ {
+typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerHeader_ ovrLayerHeader;
+struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerHeader_ {
   ovrLayerType Type; ///< Described by ovrLayerType.
   unsigned Flags; ///< Described by ovrLayerFlags.
-} ovrLayerHeader;
+
+  char Reserved[128];
+};
 
 /// Describes a layer that specifies a monoscopic or stereoscopic view.
 /// This is the kind of layer that's typically used as layer 0 to ovr_SubmitFrame,
@@ -2201,7 +2339,6 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerEyeFov_ {
   /// around the instant the application calls ovr_GetTrackingState
   /// The main purpose for this is to accurately track app tracking latency.
   double SensorSampleTime;
-
 } ovrLayerEyeFov;
 
 /// Describes a layer that specifies a monoscopic or stereoscopic view,
@@ -2248,15 +2385,15 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerEyeFovDepth_ {
   /// The main purpose for this is to accurately track app tracking latency.
   double SensorSampleTime;
 
-  /// Depth texture for positional timewarp.
+  /// Depth texture for depth composition with overlays
   /// Must map 1:1 to the ColorTexture.
   ovrTextureSwapChain DepthTexture[ovrEye_Count];
 
   /// Specifies how to convert DepthTexture information into meters.
   /// \see ovrTimewarpProjectionDesc_FromProjection
   ovrTimewarpProjectionDesc ProjectionDesc;
-
 } ovrLayerEyeFovDepth;
+
 
 /// Describes eye texture layouts. Used with ovrLayerEyeFovMultires.
 ///
@@ -2381,7 +2518,6 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerEyeFovMultires_ {
 
   /// Specifies texture layout parameters.
   ovrTextureLayoutDesc_Union TextureLayoutDesc;
-
 } ovrLayerEyeFovMultires;
 
 /// Describes a layer that specifies a monoscopic or stereoscopic view.
@@ -2431,7 +2567,6 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerEyeMatrix_ {
   /// around the instant the application calls ovr_GetTrackingState
   /// The main purpose for this is to accurately track app tracking latency.
   double SensorSampleTime;
-
 } ovrLayerEyeMatrix;
 
 /// Describes a layer of Quad type, which is a single quad in world or viewer space.
@@ -2466,7 +2601,6 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerQuad_ {
 
   /// Width and height (respectively) of the quad in meters.
   ovrVector2f QuadSize;
-
 } ovrLayerQuad;
 
 /// Describes a layer of type ovrLayerType_Cylinder which is a single cylinder
@@ -2533,7 +2667,6 @@ typedef struct OVR_ALIGNAS(OVR_PTR_SIZE) ovrLayerCylinder_ {
   /// given by: height = (CylinderRadius * CylinderAngle) / CylinderAspectRatio.
   /// Aspect ratio is width / height.
   float CylinderAspectRatio;
-
 } ovrLayerCylinder;
 
 /// Describes a layer of type ovrLayerType_Cube which is a single timewarped
@@ -2566,6 +2699,7 @@ typedef union ovrLayer_Union_ {
   ovrLayerEyeFov EyeFov;
   ovrLayerEyeFovDepth EyeFovDepth;
   ovrLayerQuad Quad;
+  ovrLayerEyeMatrix EyeMatrix;
   ovrLayerEyeFovMultires Multires;
   ovrLayerCylinder Cylinder;
   ovrLayerCube Cube;
@@ -2844,7 +2978,7 @@ ovr_EndFrame(
 
 /// Submits layers for distortion and display.
 ///
-/// Deprecated.  Use ovr_WaitToBeginFrame, ovr_BeginFrame, and ovr_EndFrame instead.
+/// \deprecated  Use ovr_WaitToBeginFrame, ovr_BeginFrame, and ovr_EndFrame instead.
 ///
 /// ovr_SubmitFrame triggers distortion and processing which might happen asynchronously.
 /// The function will return when there is room in the submission queue and surfaces
@@ -2915,6 +3049,7 @@ ovr_SubmitFrame(
     const ovrViewScaleDesc* viewScaleDesc,
     ovrLayerHeader const* const* layerPtrList,
     unsigned int layerCount);
+
 ///@}
 
 #endif // !defined(OVR_EXPORTING_CAPI)
