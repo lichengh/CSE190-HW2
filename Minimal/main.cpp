@@ -765,16 +765,12 @@ protected:
 // Execute our example class
 int main(int argc, char ** argv) {
 	int result = -1;
-	try {
-		if (!OVR_SUCCESS(ovr_Initialize(nullptr))) {
-			FAIL("Failed to initialize the Oculus SDK");
-		}
-		result = ExampleApp().run();
+
+	if (!OVR_SUCCESS(ovr_Initialize(nullptr))) {
+		FAIL("Failed to initialize the Oculus SDK");
 	}
-	catch (std::exception & error) {
-		OutputDebugStringA(error.what());
-		std::cerr << error.what() << std::endl;
-	}
+	result = ExampleApp().run();
+
 	ovr_Shutdown();
 	return result;
 }
