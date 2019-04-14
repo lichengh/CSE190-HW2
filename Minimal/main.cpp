@@ -639,7 +639,7 @@ public:
 
   void render(const glm::mat4& projection, const glm::mat4& view) {
     for (int i = 0; i < instanceCount; i++) {
-      cube->toWorld = instance_positions[i];
+      cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
       cube->draw(shaderID, projection, view);
     }
   }
