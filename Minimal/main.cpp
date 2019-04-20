@@ -41,6 +41,7 @@ limitations under the License.
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include "Skybox.h"
 
 // Import the most commonly used types into the default namespace
 using glm::ivec3;
@@ -60,9 +61,11 @@ using glm::quat;
 
 #include <GL/glew.h>
 
-bool checkFramebufferStatus(GLenum target = GL_FRAMEBUFFER) {
+bool checkFramebufferStatus(GLenum target = GL_FRAMEBUFFER)
+{
   GLuint status = glCheckFramebufferStatus(target);
-  switch (status) {
+  switch (status)
+  {
   case GL_FRAMEBUFFER_COMPLETE:
     return true;
     break;
@@ -103,13 +106,17 @@ bool checkFramebufferStatus(GLenum target = GL_FRAMEBUFFER) {
   return false;
 }
 
-bool checkGlError() {
+bool checkGlError()
+{
   GLenum error = glGetError();
-  if (!error) {
+  if (!error)
+  {
     return false;
   }
-  else {
-    switch (error) {
+  else
+  {
+    switch (error)
+    {
     case GL_INVALID_ENUM:
       std::cerr <<
         ": An unacceptable value is specified for an enumerated argument.The offending command is ignored and has no other side effect than to set the error flag.";
@@ -143,7 +150,8 @@ bool checkGlError() {
 }
 
 void glDebugCallbackHandler(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* msg,
-                            GLvoid* data) {
+                            GLvoid* data)
+{
   OutputDebugStringA(msg);
   std::cout << "debug call: " << msg << std::endl;
 }
@@ -157,12 +165,15 @@ void glDebugCallbackHandler(GLenum source, GLenum type, GLuint id, GLenum severi
 
 namespace glfw
 {
-  inline GLFWwindow* createWindow(const uvec2& size, const ivec2& position = ivec2(INT_MIN)) {
+  inline GLFWwindow* createWindow(const uvec2& size, const ivec2& position = ivec2(INT_MIN))
+  {
     GLFWwindow* window = glfwCreateWindow(size.x, size.y, "glfw", nullptr, nullptr);
-    if (!window) {
+    if (!window)
+    {
       FAIL("Unable to create rendering window");
     }
-    if ((position.x > INT_MIN) && (position.y > INT_MIN)) {
+    if ((position.x > INT_MIN) && (position.y > INT_MIN))
+    {
       glfwSetWindowPos(window, position.x, position.y);
     }
     return window;
@@ -170,8 +181,8 @@ namespace glfw
 }
 
 // A class to encapsulate using GLFW to handle input and render a scene
-class GlfwApp {
-
+class GlfwApp
+{
 protected:
   uvec2 windowSize;
   ivec2 windowPosition;
@@ -179,27 +190,33 @@ protected:
   unsigned int frame{0};
 
 public:
-  GlfwApp() {
+  GlfwApp()
+  {
     // Initialize the GLFW system for creating and positioning windows
-    if (!glfwInit()) {
+    if (!glfwInit())
+    {
       FAIL("Failed to initialize GLFW");
     }
     glfwSetErrorCallback(ErrorCallback);
   }
 
-  virtual ~GlfwApp() {
-    if (nullptr != window) {
+  virtual ~GlfwApp()
+  {
+    if (nullptr != window)
+    {
       glfwDestroyWindow(window);
     }
     glfwTerminate();
   }
 
-  virtual int run() {
+  virtual int run()
+  {
     preCreate();
 
     window = createRenderingTarget(windowSize, windowPosition);
 
-    if (!window) {
+    if (!window)
+    {
       std::cout << "Unable to create OpenGL window" << std::endl;
       return -1;
     }
@@ -208,7 +225,8 @@ public:
 
     initGl();
 
-    while (!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window))
+    {
       ++frame;
       glfwPollEvents();
       update();
@@ -226,7 +244,8 @@ protected:
 
   virtual void draw() = 0;
 
-  void preCreate() {
+  void preCreate()
+  {
     glfwWindowHint(GLFW_DEPTH_BITS, 16);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
@@ -234,7 +253,8 @@ protected:
     glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
   }
 
-  void postCreate() {
+  void postCreate()
+  {
     glfwSetWindowUserPointer(window, this);
     glfwSetKeyCallback(window, KeyCallback);
     glfwSetMouseButtonCallback(window, MouseButtonCallback);
@@ -244,72 +264,88 @@ protected:
     // For some reason we have to set this experminetal flag to properly
     // init GLEW if we use a core context.
     glewExperimental = GL_TRUE;
-    if (0 != glewInit()) {
+    if (0 != glewInit())
+    {
       FAIL("Failed to initialize GLEW");
     }
     glGetError();
 
-    if (GLEW_KHR_debug) {
+    if (GLEW_KHR_debug)
+    {
       GLint v;
       glGetIntegerv(GL_CONTEXT_FLAGS, &v);
-      if (v & GL_CONTEXT_FLAG_DEBUG_BIT) {
+      if (v & GL_CONTEXT_FLAG_DEBUG_BIT)
+      {
         //glDebugMessageCallback(glDebugCallbackHandler, this);
       }
     }
   }
 
-  virtual void initGl() {
+  virtual void initGl()
+  {
   }
 
-  virtual void shutdownGl() {
+  virtual void shutdownGl()
+  {
   }
 
-  virtual void finishFrame() {
+  virtual void finishFrame()
+  {
     glfwSwapBuffers(window);
   }
 
-  virtual void destroyWindow() {
+  virtual void destroyWindow()
+  {
     glfwSetKeyCallback(window, nullptr);
     glfwSetMouseButtonCallback(window, nullptr);
     glfwDestroyWindow(window);
   }
 
-  virtual void onKey(int key, int scancode, int action, int mods) {
-    if (GLFW_PRESS != action) {
+  virtual void onKey(int key, int scancode, int action, int mods)
+  {
+    if (GLFW_PRESS != action)
+    {
       return;
     }
 
-    switch (key) {
+    switch (key)
+    {
     case GLFW_KEY_ESCAPE:
       glfwSetWindowShouldClose(window, 1);
       return;
     }
   }
 
-  virtual void update() {
+  virtual void update()
+  {
   }
 
-  virtual void onMouseButton(int button, int action, int mods) {
+  virtual void onMouseButton(int button, int action, int mods)
+  {
   }
 
 protected:
-  virtual void viewport(const ivec2& pos, const uvec2& size) {
+  virtual void viewport(const ivec2& pos, const uvec2& size)
+  {
     glViewport(pos.x, pos.y, size.x, size.y);
   }
 
 private:
 
-  static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+  static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+  {
     GlfwApp* instance = (GlfwApp *)glfwGetWindowUserPointer(window);
     instance->onKey(key, scancode, action, mods);
   }
 
-  static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+  static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+  {
     GlfwApp* instance = (GlfwApp *)glfwGetWindowUserPointer(window);
     instance->onMouseButton(button, action, mods);
   }
 
-  static void ErrorCallback(int error, const char* description) {
+  static void ErrorCallback(int error, const char* description)
+  {
     FAIL(description);
   }
 };
@@ -326,52 +362,63 @@ namespace ovr
 {
   // Convenience method for looping over each eye with a lambda
   template <typename Function>
-  inline void for_each_eye(Function function) {
+  inline void for_each_eye(Function function)
+  {
     for (ovrEyeType eye = ovrEyeType::ovrEye_Left;
          eye < ovrEyeType::ovrEye_Count;
-         eye = static_cast<ovrEyeType>(eye + 1)) {
+         eye = static_cast<ovrEyeType>(eye + 1))
+    {
       function(eye);
     }
   }
 
-  inline mat4 toGlm(const ovrMatrix4f& om) {
+  inline mat4 toGlm(const ovrMatrix4f& om)
+  {
     return glm::transpose(glm::make_mat4(&om.M[0][0]));
   }
 
-  inline mat4 toGlm(const ovrFovPort& fovport, float nearPlane = 0.01f, float farPlane = 10000.0f) {
+  inline mat4 toGlm(const ovrFovPort& fovport, float nearPlane = 0.01f, float farPlane = 10000.0f)
+  {
     return toGlm(ovrMatrix4f_Projection(fovport, nearPlane, farPlane, true));
   }
 
-  inline vec3 toGlm(const ovrVector3f& ov) {
+  inline vec3 toGlm(const ovrVector3f& ov)
+  {
     return glm::make_vec3(&ov.x);
   }
 
-  inline vec2 toGlm(const ovrVector2f& ov) {
+  inline vec2 toGlm(const ovrVector2f& ov)
+  {
     return glm::make_vec2(&ov.x);
   }
 
-  inline uvec2 toGlm(const ovrSizei& ov) {
+  inline uvec2 toGlm(const ovrSizei& ov)
+  {
     return uvec2(ov.w, ov.h);
   }
 
-  inline quat toGlm(const ovrQuatf& oq) {
+  inline quat toGlm(const ovrQuatf& oq)
+  {
     return glm::make_quat(&oq.x);
   }
 
-  inline mat4 toGlm(const ovrPosef& op) {
+  inline mat4 toGlm(const ovrPosef& op)
+  {
     mat4 orientation = glm::mat4_cast(toGlm(op.Orientation));
     mat4 translation = glm::translate(mat4(), ovr::toGlm(op.Position));
     return translation * orientation;
   }
 
-  inline ovrMatrix4f fromGlm(const mat4& m) {
+  inline ovrMatrix4f fromGlm(const mat4& m)
+  {
     ovrMatrix4f result;
     mat4 transposed(glm::transpose(m));
     memcpy(result.M, &(transposed[0][0]), sizeof(float) * 16);
     return result;
   }
 
-  inline ovrVector3f fromGlm(const vec3& v) {
+  inline ovrVector3f fromGlm(const vec3& v)
+  {
     ovrVector3f result;
     result.x = v.x;
     result.y = v.y;
@@ -379,21 +426,24 @@ namespace ovr
     return result;
   }
 
-  inline ovrVector2f fromGlm(const vec2& v) {
+  inline ovrVector2f fromGlm(const vec2& v)
+  {
     ovrVector2f result;
     result.x = v.x;
     result.y = v.y;
     return result;
   }
 
-  inline ovrSizei fromGlm(const uvec2& v) {
+  inline ovrSizei fromGlm(const uvec2& v)
+  {
     ovrSizei result;
     result.w = v.x;
     result.h = v.y;
     return result;
   }
 
-  inline ovrQuatf fromGlm(const quat& q) {
+  inline ovrQuatf fromGlm(const quat& q)
+  {
     ovrQuatf result;
     result.x = q.x;
     result.y = q.y;
@@ -403,28 +453,33 @@ namespace ovr
   }
 }
 
-class RiftManagerApp {
+class RiftManagerApp
+{
 protected:
   ovrSession _session;
   ovrHmdDesc _hmdDesc;
   ovrGraphicsLuid _luid;
 
 public:
-  RiftManagerApp() {
-    if (!OVR_SUCCESS(ovr_Create(&_session, &_luid))) {
+  RiftManagerApp()
+  {
+    if (!OVR_SUCCESS(ovr_Create(&_session, &_luid)))
+    {
       FAIL("Unable to create HMD session");
     }
 
     _hmdDesc = ovr_GetHmdDesc(_session);
   }
 
-  ~RiftManagerApp() {
+  ~RiftManagerApp()
+  {
     ovr_Destroy(_session);
     _session = nullptr;
   }
 };
 
-class RiftApp : public GlfwApp, public RiftManagerApp {
+class RiftApp : public GlfwApp, public RiftManagerApp
+{
 public:
 
 private:
@@ -447,7 +502,8 @@ private:
 
 public:
 
-  RiftApp() {
+  RiftApp()
+  {
     using namespace ovr;
     _viewScaleDesc.HmdSpaceToWorldScaleInMeters = 1.0f;
 
@@ -477,11 +533,13 @@ public:
   }
 
 protected:
-  GLFWwindow* createRenderingTarget(uvec2& outSize, ivec2& outPosition) override {
+  GLFWwindow* createRenderingTarget(uvec2& outSize, ivec2& outPosition) override
+  {
     return glfw::createWindow(_mirrorSize);
   }
 
-  void initGl() override {
+  void initGl() override
+  {
     GlfwApp::initGl();
 
     // Disable the v-sync for buffer swap
@@ -498,16 +556,19 @@ protected:
     desc.StaticImage = ovrFalse;
     ovrResult result = ovr_CreateTextureSwapChainGL(_session, &desc, &_eyeTexture);
     _sceneLayer.ColorTexture[0] = _eyeTexture;
-    if (!OVR_SUCCESS(result)) {
+    if (!OVR_SUCCESS(result))
+    {
       FAIL("Failed to create swap textures");
     }
 
     int length = 0;
     result = ovr_GetTextureSwapChainLength(_session, _eyeTexture, &length);
-    if (!OVR_SUCCESS(result) || !length) {
+    if (!OVR_SUCCESS(result) || !length)
+    {
       FAIL("Unable to count swap chain textures");
     }
-    for (int i = 0; i < length; ++i) {
+    for (int i = 0; i < length; ++i)
+    {
       GLuint chainTexId;
       ovr_GetTextureSwapChainBufferGL(_session, _eyeTexture, i, &chainTexId);
       glBindTexture(GL_TEXTURE_2D, chainTexId);
@@ -533,15 +594,18 @@ protected:
     mirrorDesc.Format = OVR_FORMAT_R8G8B8A8_UNORM_SRGB;
     mirrorDesc.Width = _mirrorSize.x;
     mirrorDesc.Height = _mirrorSize.y;
-    if (!OVR_SUCCESS(ovr_CreateMirrorTextureGL(_session, &mirrorDesc, &_mirrorTexture))) {
+    if (!OVR_SUCCESS(ovr_CreateMirrorTextureGL(_session, &mirrorDesc, &_mirrorTexture)))
+    {
       FAIL("Could not create mirror texture");
     }
     glGenFramebuffers(1, &_mirrorFbo);
   }
 
-  void onKey(int key, int scancode, int action, int mods) override {
+  void onKey(int key, int scancode, int action, int mods) override
+  {
     if (GLFW_PRESS == action)
-      switch (key) {
+      switch (key)
+      {
       case GLFW_KEY_R:
         ovr_RecenterTrackingOrigin(_session);
         return;
@@ -550,7 +614,8 @@ protected:
     GlfwApp::onKey(key, scancode, action, mods);
   }
 
-  void draw() final override {
+  void draw() final override
+  {
     ovrPosef eyePoses[2];
     ovr_GetEyePoses(_session, frame, true, _viewScaleDesc.HmdToEyePose, eyePoses, &_sceneLayer.SensorSampleTime);
 
@@ -598,84 +663,90 @@ protected:
 #include "Cube.h"
 
 // a class for building and rendering cubes
-class ColorCubeScene {
-
+class Scene
+{
   // Program
   std::vector<glm::mat4> instance_positions;
   GLuint instanceCount;
   GLuint shaderID;
-  std::unique_ptr<Cube> cube;
+
+  std::unique_ptr<TexturedCube> cube;
+  std::unique_ptr<Skybox> skybox;
 
   const unsigned int GRID_SIZE{5};
 
 public:
-  ColorCubeScene() {
-    // Create a cube of cubes
-    {
-      for (unsigned int z = 0; z < GRID_SIZE; ++z) {
-        for (unsigned int y = 0; y < GRID_SIZE; ++y) {
-          for (unsigned int x = 0; x < GRID_SIZE; ++x) {
-            int xpos = (x - (GRID_SIZE / 2)) * 2;
-            int ypos = (y - (GRID_SIZE / 2)) * 2;
-            int zpos = (z - (GRID_SIZE / 2)) * 2;
-            vec3 relativePosition = vec3(xpos, ypos, zpos);
-            if (relativePosition == vec3(0)) {
-              continue;
-            }
-            instance_positions.push_back(glm::translate(glm::mat4(1.0f), relativePosition));
-          }
-        }
-      }
-    }
+  Scene()
+  {
+    // Create two cube
+    instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.3)));
+    instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.9)));
 
     instanceCount = instance_positions.size();
 
     // Shader Program 
-    shaderID = LoadShaders("shader.vert", "shader.frag");
+    shaderID = LoadShaders("skybox.vert", "skybox.frag");
 
-    // Cube
-    cube = std::make_unique<Cube>();
+    cube = std::make_unique<TexturedCube>("cube"); 
+
+	  // 10m wide sky box: size doesn't matter though
+    skybox = std::make_unique<Skybox>("skybox");
+	  skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
   }
 
-  void render(const glm::mat4& projection, const glm::mat4& view) {
-    for (int i = 0; i < instanceCount; i++) {
-      cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
+  void render(const glm::mat4& projection, const glm::mat4& view)
+  {
+    // Render two cubes
+    for (int i = 0; i < instanceCount; i++)
+    {
+      // Scale to 20cm: 200cm * 0.1
+      cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
       cube->draw(shaderID, projection, view);
     }
+
+    // Render Skybox : remove view translation
+    skybox->draw(shaderID, projection, view);
   }
 };
 
 // An example application that renders a simple cube
-class ExampleApp : public RiftApp {
-  std::shared_ptr<ColorCubeScene> cubeScene;
+class ExampleApp : public RiftApp
+{
+  std::shared_ptr<Scene> scene;
 
 public:
-  ExampleApp() {
+  ExampleApp()
+  {
   }
 
 protected:
-  void initGl() override {
+  void initGl() override
+  {
     RiftApp::initGl();
     glClearColor(0.2f, 0.2f, 0.2f, 0.0f);
     glEnable(GL_DEPTH_TEST);
     ovr_RecenterTrackingOrigin(_session);
-    cubeScene = std::shared_ptr<ColorCubeScene>(new ColorCubeScene());
+    scene = std::shared_ptr<Scene>(new Scene());
   }
 
-  void shutdownGl() override {
-    cubeScene.reset();
+  void shutdownGl() override
+  {
+    scene.reset();
   }
 
-  void renderScene(const glm::mat4& projection, const glm::mat4& headPose) override {
-    cubeScene->render(projection, glm::inverse(headPose));
+  void renderScene(const glm::mat4& projection, const glm::mat4& headPose) override
+  {
+    scene->render(projection, glm::inverse(headPose));
   }
 };
 
 // Execute our example class
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
   int result = -1;
 
-  if (!OVR_SUCCESS(ovr_Initialize(nullptr))) {
+  if (!OVR_SUCCESS(ovr_Initialize(nullptr)))
+  {
     FAIL("Failed to initialize the Oculus SDK");
   }
   result = ExampleApp().run();

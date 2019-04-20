@@ -1,5 +1,5 @@
-#ifndef _CUBE_H_
-#define _CUBE_H_
+#ifndef CUBE_H
+#define CUBE_H
 
 #define GLFW_INCLUDE_GLEXT
 #ifdef __APPLE__
