@@ -626,13 +626,15 @@ protected:
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, curTexId, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    ovr::for_each_eye([&](ovrEyeType eye)
+    
+	ovr::for_each_eye([&](ovrEyeType eye)
     {
       const auto& vp = _sceneLayer.Viewport[eye];
       glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
       _sceneLayer.RenderPose[eye] = eyePoses[eye];
-      renderScene(_eyeProjections[eye], ovr::toGlm(eyePoses[eye]));
+	  renderScene(_eyeProjections[eye], ovr::toGlm(eyePoses[eye]), eye);
     });
+
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     ovr_CommitTextureSwapChain(_session, _eyeTexture);
@@ -648,7 +650,7 @@ protected:
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
   }
 
-  virtual void renderScene(const glm::mat4& projection, const glm::mat4& headPose) = 0;
+  virtual void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -672,6 +674,7 @@ class Scene
 
   std::unique_ptr<TexturedCube> cube;
   std::unique_ptr<Skybox> skybox;
+  std::unique_ptr<Skybox> skybox_right;
 
   const unsigned int GRID_SIZE{5};
 
@@ -689,23 +692,67 @@ public:
 
     cube = std::make_unique<TexturedCube>("cube"); 
 
-	  // 10m wide sky box: size doesn't matter though
+	// 10m wide sky box: size doesn't matter though
     skybox = std::make_unique<Skybox>("skybox");
-	  skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
+	skybox_right = std::make_unique<Skybox>("skybox_righteye");
+	
+	skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
+	skybox_right -> toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
   }
 
-  void render(const glm::mat4& projection, const glm::mat4& view)
+  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int viewMode)
   {
-    // Render two cubes
-    for (int i = 0; i < instanceCount; i++)
-    {
-      // Scale to 20cm: 200cm * 0.1
-      cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
-      cube->draw(shaderID, projection, view);
-    }
+	  //Entire scene in stereo
+	  
+	  if (viewMode % 3 == 0) {
+		  // Render two cubes
+		  for (int i = 0; i < instanceCount; i++)
+		  {
+			  // Scale to 20cm: 200cm * 0.1
+			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+			  cube->draw(shaderID, projection, view);
+		  }
 
-    // Render Skybox : remove view translation
-    skybox->draw(shaderID, projection, view);
+		  // Render Skybox : remove view translation
+		  if (whichEye == 0) {
+			  skybox->draw(shaderID, projection, view);
+		  }
+		  if (whichEye == 1) {
+			  skybox_right->draw(shaderID, projection, view);
+		  }
+	  }
+
+	  if (viewMode % 3 == 1) {
+		  // Render two cubes
+		  for (int i = 0; i < instanceCount; i++)
+		  {
+			  // Scale to 20cm: 200cm * 0.1
+			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+			  cube->draw(shaderID, projection, view);
+		  }
+
+		  // Render Skybox : remove view translation
+		  if (whichEye == 0) {
+			  skybox->draw(shaderID, projection, view);
+		  }
+		  if (whichEye == 1) {
+			  skybox_right->draw(shaderID, projection, view);
+		  }
+	  }
+
+	  if (viewMode % 3 == 2) {
+		  // Render two cubes
+		  for (int i = 0; i < instanceCount; i++)
+		  {
+			  // Scale to 20cm: 200cm * 0.1
+			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+			  cube->draw(shaderID, projection, view);
+		  }
+
+		  // Render Skybox : remove view translation
+		  skybox->draw(shaderID, projection, view);
+		  //skybox->draw(shaderID, projection, view);
+	  }
   }
 };
 
@@ -717,9 +764,13 @@ class ExampleApp : public RiftApp
 public:
   ExampleApp()
   {
+
   }
 
 protected:
+
+	int x_pressed = 0;
+
   void initGl() override
   {
     RiftApp::initGl();
@@ -734,9 +785,18 @@ protected:
     scene.reset();
   }
 
-  void renderScene(const glm::mat4& projection, const glm::mat4& headPose) override
+  void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {
-    scene->render(projection, glm::inverse(headPose));
+	  ovrInputState inputState;
+	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
+	  {
+		  if (inputState.Buttons & ovrButton_X) {
+			  x_pressed++;
+		  }
+	  }
+	  
+	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed);
+
   }
 };
 
