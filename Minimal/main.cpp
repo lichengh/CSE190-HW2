@@ -756,8 +756,13 @@ class ExampleApp : public RiftApp
 public:
 
 	int x_pressed = 0;
+	bool x_hasPressed = false;
 	int a_pressed = 0;
 	int b_pressed = 0;
+	
+	ovrInputState inputState;
+	float cubeScale = 0;
+	//int leftStick_moved = false;
 
   ExampleApp()
   {
@@ -782,20 +787,32 @@ protected:
 
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {
-	  ovrInputState inputState;
-	  float cubeScale = 0.0f;
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
-			  x_pressed = (x_pressed+1)%3;
+
+			  if (!x_hasPressed) {
+				  x_pressed = (x_pressed + 1) % 3;
+				  std::cout << x_pressed << std::endl;
+				  x_hasPressed = true;
+			  }
+		  }
+
+		  if (!(inputState.Buttons & ovrButton_X) & x_hasPressed) {
+			  x_hasPressed = false;
 		  }
 
 		  if (inputState.Thumbstick[ovrHand_Left].x) {
-			  cubeScale = inputState.Thumbstick[ovrHand_Left].x
-		  }
+			  
+			  cubeScale = cubeScale + inputState.Thumbstick[ovrHand_Left].x;
 
-		  if (inputState.Buttons & ovrButton_LThumb) {
-			  cubeScale = 0.0f;
+			  if (cubeScale > 1.0f) {
+				  cubeScale = 1.0f;
+			  }
+
+			  if (cubeScale < -1.0f) {
+				  cubeScale = -1.0f;
+			  }
 		  }
 
 		  if (inputState.Buttons & ovrButton_A) {
@@ -808,7 +825,6 @@ protected:
 	  }
 	  
 	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, a_pressed, b_pressed);
-
   }
 };
 
@@ -823,6 +839,6 @@ int main(int argc, char** argv)
 	}
 	result = ExampleApp().run();
 
-	ovr_Shutdown();
+	//ovr_Shutdown();
 	return result;
 }
