@@ -679,37 +679,36 @@ class Scene
   const unsigned int GRID_SIZE{5};
 
 public:
-  Scene()
-  {
-    // Create two cube
-    instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.3)));
-    instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.9)));
+	Scene()
+	{
+		// Create two cube
+		instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.3)));
+		instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.9)));
 
-    instanceCount = instance_positions.size();
+		instanceCount = instance_positions.size();
 
-    // Shader Program 
-    shaderID = LoadShaders("skybox.vert", "skybox.frag");
+		// Shader Program
+		shaderID = LoadShaders("skybox.vert", "skybox.frag");
 
-    cube = std::make_unique<TexturedCube>("cube"); 
+		cube = std::make_unique<TexturedCube>("cube");
 
-	// 10m wide sky box: size doesn't matter though
-    skybox = std::make_unique<Skybox>("skybox");
-	skybox_right = std::make_unique<Skybox>("skybox_righteye");
-	
-	skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
-	skybox_right -> toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
-  }
+		// 10m wide sky box: size doesn't matter though
+		skybox = std::make_unique<Skybox>("skybox");
+		skybox_right = std::make_unique<Skybox>("skybox_righteye");
 
-  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int viewMode)
+		skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
+		skybox_right->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
+	}
+
+  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int a_pressed, const int b_pressed)
   {
 	  //Entire scene in stereo
-	  
-	  if (viewMode % 3 == 0) {
+	  if (x_pressed % 3 == 0) {
 		  // Render two cubes
 		  for (int i = 0; i < instanceCount; i++)
 		  {
 			  // Scale to 20cm: 200cm * 0.1
-			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
+			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.15f+0.1*cubeScale));
 			  cube->draw(shaderID, projection, view);
 		  }
 
@@ -722,14 +721,8 @@ public:
 		  }
 	  }
 
-	  if (viewMode % 3 == 1) {
-		  // Render two cubes
-		  for (int i = 0; i < instanceCount; i++)
-		  {
-			  // Scale to 20cm: 200cm * 0.1
-			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
-			  cube->draw(shaderID, projection, view);
-		  }
+	  //Stereo skybox only
+	  if (x_pressed % 3 == 1) {
 
 		  // Render Skybox : remove view translation
 		  if (whichEye == 0) {
@@ -740,18 +733,15 @@ public:
 		  }
 	  }
 
-	  if (viewMode % 3 == 2) {
-		  // Render two cubes
-		  for (int i = 0; i < instanceCount; i++)
-		  {
-			  // Scale to 20cm: 200cm * 0.1
-			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
-			  cube->draw(shaderID, projection, view);
+	  //Mono skybox only
+	  if (x_pressed % 3 == 2) {
+		
+		  if (whichEye == 0) {
+			  skybox->draw(shaderID, projection, view);
 		  }
-
-		  // Render Skybox : remove view translation
-		  skybox->draw(shaderID, projection, view);
-		  //skybox->draw(shaderID, projection, view);
+		  if (whichEye == 1) {
+			  skybox->draw(shaderID, projection, view);
+		  }
 	  }
   }
 };
@@ -762,14 +752,17 @@ class ExampleApp : public RiftApp
   std::shared_ptr<Scene> scene;
 
 public:
+
+	int x_pressed = 0;
+	int a_pressed = 0;
+	int b_pressed = 0;
+
   ExampleApp()
   {
 
   }
 
 protected:
-
-	int x_pressed = 0;
 
   void initGl() override
   {
@@ -788,14 +781,23 @@ protected:
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {
 	  ovrInputState inputState;
+	  float cubeScale = 0.0f;
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
 			  x_pressed++;
 		  }
+
+		  if (inputState.Thumbstick[ovrHand_Left].x) {
+			  cubeScale = inputState.Thumbstick[ovrHand_Left].x
+		  }
+
+		  if (inputState.Buttons & ovrButton_LThumb) {
+			  cubeScale = 0.0f;
+		  }
 	  }
 	  
-	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed);
+	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, a_pressed, b_pressed);
 
   }
 };
@@ -803,14 +805,14 @@ protected:
 // Execute our example class
 int main(int argc, char** argv)
 {
-  int result = -1;
+	int result = -1;
 
-  if (!OVR_SUCCESS(ovr_Initialize(nullptr)))
-  {
-    FAIL("Failed to initialize the Oculus SDK");
-  }
-  result = ExampleApp().run();
+	if (!OVR_SUCCESS(ovr_Initialize(nullptr)))
+	{
+		FAIL("Failed to initialize the Oculus SDK");
+	}
+	result = ExampleApp().run();
 
-  ovr_Shutdown();
-  return result;
+	ovr_Shutdown();
+	return result;
 }
