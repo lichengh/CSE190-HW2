@@ -703,7 +703,7 @@ public:
   void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int a_pressed, const int b_pressed)
   {
 	  //Entire scene in stereo
-	  if (x_pressed % 3 == 0) {
+	  if (x_pressed == 0) {
 		  // Render two cubes
 		  for (int i = 0; i < instanceCount; i++)
 		  {
@@ -722,7 +722,7 @@ public:
 	  }
 
 	  //Stereo skybox only
-	  if (x_pressed % 3 == 1) {
+	  if (x_pressed == 1) {
 
 		  // Render Skybox : remove view translation
 		  if (whichEye == 0) {
@@ -734,7 +734,7 @@ public:
 	  }
 
 	  //Mono skybox only
-	  if (x_pressed % 3 == 2) {
+	  if (x_pressed == 2) {
 		
 		  if (whichEye == 0) {
 			  skybox->draw(shaderID, projection, view);
@@ -744,6 +744,8 @@ public:
 		  }
 	  }
   }
+
+
 };
 
 // An example application that renders a simple cube
@@ -785,7 +787,7 @@ protected:
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
-			  x_pressed++;
+			  x_pressed = (x_pressed+1)%3;
 		  }
 
 		  if (inputState.Thumbstick[ovrHand_Left].x) {
@@ -794,6 +796,14 @@ protected:
 
 		  if (inputState.Buttons & ovrButton_LThumb) {
 			  cubeScale = 0.0f;
+		  }
+
+		  if (inputState.Buttons & ovrButton_A) {
+			  a_pressed = (a_pressed + 1)%4;
+		  }
+
+		  if (inputState.Buttons & ovrButton_B) {
+			  b_pressed = (b_pressed + 1) % 4;
 		  }
 	  }
 	  
