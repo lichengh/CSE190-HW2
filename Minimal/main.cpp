@@ -481,6 +481,9 @@ public:
 class RiftApp : public GlfwApp, public RiftManagerApp
 {
 public:
+	ovrInputState inputState;
+	int a_pressed = 0;
+	int a_hasPressed = false;
 
 private:
   GLuint _fbo{0};
@@ -627,13 +630,59 @@ protected:
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, curTexId, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
-	ovr::for_each_eye([&](ovrEyeType eye)
-    {
-      const auto& vp = _sceneLayer.Viewport[eye];
-      glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
-      _sceneLayer.RenderPose[eye] = eyePoses[eye];
-	  renderScene(_eyeProjections[eye], ovr::toGlm(eyePoses[eye]), eye);
-    });
+
+	if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
+	{
+
+		//Change viewing mode by pressing A
+		if (inputState.Buttons & ovrButton_A) {
+
+			if (!a_hasPressed) {
+				a_pressed = (a_pressed + 1) % 4;
+				std::cout << a_pressed << std::endl;
+				a_hasPressed = true;
+			}
+		}
+
+		if (a_pressed == 0) {
+			ovr::for_each_eye([&](ovrEyeType eye)
+			{
+				const auto& vp = _sceneLayer.Viewport[eye];
+				glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
+				_sceneLayer.RenderPose[eye] = eyePoses[eye];
+				renderScene(_eyeProjections[eye], ovr::toGlm(eyePoses[eye]), eye);
+			});
+		}
+
+
+		if (a_pressed == 1) {
+			const auto& vp = _sceneLayer.Viewport[0];
+			glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
+			_sceneLayer.RenderPose[0] = eyePoses[0];
+			renderScene(_eyeProjections[0], ovr::toGlm(eyePoses[0]), 0);
+		}
+
+		if (a_pressed == 2) {
+			const auto& vp = _sceneLayer.Viewport[1];
+			glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
+			_sceneLayer.RenderPose[1] = eyePoses[1];
+			renderScene(_eyeProjections[1], ovr::toGlm(eyePoses[1]), 1);
+		}
+
+		if (a_pressed == 3) {
+			ovr::for_each_eye([&](ovrEyeType eye)
+			{
+				const auto& vp = _sceneLayer.Viewport[eye];
+				glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
+				_sceneLayer.RenderPose[eye] = eyePoses[eye];
+				renderScene(_eyeProjections[eye], ovr::toGlm(eyePoses[eye]), 1-eye);
+			});
+		}
+
+		if (!(inputState.Buttons & ovrButton_A) & a_hasPressed) {
+			a_hasPressed = false;
+		}
+	}
 
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -700,7 +749,7 @@ public:
 		skybox_right->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
 	}
 
-  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int a_pressed, const int b_pressed)
+  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed)
   {
 	  //Entire scene in stereo
 	  if (x_pressed == 0) {
@@ -755,14 +804,12 @@ class ExampleApp : public RiftApp
 
 public:
 
-	int x_pressed = 0;
-	bool x_hasPressed = false;
-	int a_pressed = 0;
-	int b_pressed = 0;
-	
 	ovrInputState inputState;
 	float cubeScale = 0;
-	//int leftStick_moved = false;
+	int x_pressed = 0;
+
+	bool x_hasPressed = false;
+	int b_pressed = 0;
 
   ExampleApp()
   {
@@ -804,7 +851,7 @@ protected:
 
 		  if (inputState.Thumbstick[ovrHand_Left].x) {
 			  
-			  cubeScale = cubeScale + inputState.Thumbstick[ovrHand_Left].x;
+			  cubeScale = cubeScale + inputState.Thumbstick[ovrHand_Left].x/10.0f;
 
 			  if (cubeScale > 1.0f) {
 				  cubeScale = 1.0f;
@@ -814,9 +861,9 @@ protected:
 				  cubeScale = -1.0f;
 			  }
 		  }
-
-		  if (inputState.Buttons & ovrButton_A) {
-			  a_pressed = (a_pressed + 1)%4;
+		  
+		  if (inputState.Buttons & ovrButton_LThumb) {
+			  cubeScale = 0;
 		  }
 
 		  if (inputState.Buttons & ovrButton_B) {
@@ -824,7 +871,7 @@ protected:
 		  }
 	  }
 	  
-	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, a_pressed, b_pressed);
+	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed);
   }
 };
 
