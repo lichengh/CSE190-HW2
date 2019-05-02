@@ -483,7 +483,7 @@ class RiftApp : public GlfwApp, public RiftManagerApp
 public:
 	ovrInputState inputState;
 	int a_pressed = 0;
-	int a_hasPressed = false;
+	bool a_hasPressed = false;
 
 private:
   GLuint _fbo{0};
@@ -654,7 +654,6 @@ protected:
 			});
 		}
 
-
 		if (a_pressed == 1) {
 			const auto& vp = _sceneLayer.Viewport[0];
 			glViewport(vp.Pos.x, vp.Pos.y, vp.Size.w, vp.Size.h);
@@ -726,6 +725,8 @@ class Scene
   std::unique_ptr<Skybox> skybox_right;
 
   const unsigned int GRID_SIZE{5};
+  glm::mat4 oldView;
+  glm::mat4 drawView;
 
 public:
 	Scene()
@@ -751,6 +752,26 @@ public:
 
   void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed)
   {
+	  oldView = view;
+	  glm::quat rotation;
+	  glm::vec4 postion;
+
+	  if (b_pressed == 0) {
+		  drawView = oldView;
+	  }
+
+	  if (b_pressed == 1) {
+
+	  }
+
+	  if (b_pressed == 2) {
+
+	  }
+
+	  if (b_pressed == 3) {
+
+	  }
+
 	  //Entire scene in stereo
 	  if (x_pressed == 0) {
 		  // Render two cubes
@@ -807,9 +828,12 @@ public:
 	ovrInputState inputState;
 	float cubeScale = 0;
 	int x_pressed = 0;
-
 	bool x_hasPressed = false;
+
 	int b_pressed = 0;
+	bool b_hasPressed = false;
+
+	glm::mat4 oldView;
 
   ExampleApp()
   {
@@ -834,6 +858,7 @@ protected:
 
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {
+
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
@@ -867,7 +892,16 @@ protected:
 		  }
 
 		  if (inputState.Buttons & ovrButton_B) {
-			  b_pressed = (b_pressed + 1) % 4;
+
+			  if (!b_hasPressed) {
+				  b_pressed = (b_pressed + 1) % 4;
+				  std::cout << b_pressed << std::endl;
+				  b_hasPressed = true;
+			  }
+		  }
+
+		  if (!(inputState.Buttons & ovrButton_B) & b_hasPressed) {
+			  b_hasPressed = false;
 		  }
 	  }
 	  
