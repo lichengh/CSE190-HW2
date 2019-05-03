@@ -485,6 +485,12 @@ public:
 	int a_pressed = 0;
 	bool a_hasPressed = false;
 
+	int b_pressed = 0;
+	bool b_hasPressed = false;
+	glm::mat4 oldView;
+	glm::quat oldRotation;
+	glm::vec4 oldPostion;
+
 private:
   GLuint _fbo{0};
   GLuint _depthBuffer{0};
@@ -681,6 +687,7 @@ protected:
 		if (!(inputState.Buttons & ovrButton_A) & a_hasPressed) {
 			a_hasPressed = false;
 		}
+
 	}
 
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
@@ -725,7 +732,8 @@ class Scene
   std::unique_ptr<Skybox> skybox_right;
 
   const unsigned int GRID_SIZE{5};
-  glm::mat4 oldView;
+  glm::mat4 ldrawView;
+  glm::mat4 rdrawView;
   glm::mat4 drawView;
 
 public:
@@ -750,26 +758,55 @@ public:
 		skybox_right->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
 	}
 
-  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed)
+  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed, const glm::mat3& rot, const glm::vec4& pos)
   {
-	  oldView = view;
-	  glm::quat rotation;
-	  glm::vec4 postion;
-
 	  if (b_pressed == 0) {
-		  drawView = oldView;
-	  }
-
-	  if (b_pressed == 1) {
-
+		  //ldrawView = view;
+		  //rdrawView = view;
+		  drawView = view;
 	  }
 
 	  if (b_pressed == 2) {
+		  /*
+		  if (whichEye == 0) {
+			  ldrawView = view;
+			  ldrawView[3] = lpos;
+		  }
 
+		  if (whichEye == 1) {
+			  rdrawView = view;
+			  rdrawView[3] = rpos;
+		  }*/
+		  drawView = view;
+		  drawView[3] = pos;
+	  }
+
+	  if (b_pressed == 1) {
+		  /*
+		  if (whichEye == 0) {
+			  ldrawView = glm::mat4(lrot);
+			  ldrawView[3] = view[3];
+		  }
+		  if(whichEye == 1) {
+			  rdrawView = glm::mat4(rrot);
+			  rdrawView[3] = view[3];
+		  }*/
+		  drawView = glm::mat4(rot);
+		  drawView[3] = view[3];
 	  }
 
 	  if (b_pressed == 3) {
-
+		  /*
+		  if (whichEye == 0) {
+			  ldrawView = glm::mat4(lrot);
+			  ldrawView[3] = lpos;
+		  }
+		  if (whichEye == 1) {
+			  rdrawView = glm::mat4(rrot);
+			  rdrawView[3] = rpos;
+		  }*/
+		  drawView = glm::mat4(rot);
+		  drawView[3] = pos;
 	  }
 
 	  //Entire scene in stereo
@@ -778,16 +815,22 @@ public:
 		  for (int i = 0; i < instanceCount; i++)
 		  {
 			  // Scale to 20cm: 200cm * 0.1
-			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.15f+0.1*cubeScale));
-			  cube->draw(shaderID, projection, view);
+			  cube->toWorld = instance_positions[i] * glm::scale(glm::mat4(1.0f), glm::vec3(0.15f + 0.1*cubeScale));
+			  if (whichEye == 0) {
+				  cube->draw(shaderID, projection, drawView);
+			  }
+
+			  if (whichEye == 1) {
+				  cube->draw(shaderID, projection, drawView);
+			  }
 		  }
 
 		  // Render Skybox : remove view translation
 		  if (whichEye == 0) {
-			  skybox->draw(shaderID, projection, view);
+			  skybox->draw(shaderID, projection, drawView);
 		  }
 		  if (whichEye == 1) {
-			  skybox_right->draw(shaderID, projection, view);
+			  skybox_right->draw(shaderID, projection, drawView);
 		  }
 	  }
 
@@ -796,10 +839,10 @@ public:
 
 		  // Render Skybox : remove view translation
 		  if (whichEye == 0) {
-			  skybox->draw(shaderID, projection, view);
+			  skybox->draw(shaderID, projection, drawView);
 		  }
 		  if (whichEye == 1) {
-			  skybox_right->draw(shaderID, projection, view);
+			  skybox_right->draw(shaderID, projection, drawView);
 		  }
 	  }
 
@@ -807,12 +850,14 @@ public:
 	  if (x_pressed == 2) {
 		
 		  if (whichEye == 0) {
-			  skybox->draw(shaderID, projection, view);
+			  skybox->draw(shaderID, projection, drawView);
 		  }
 		  if (whichEye == 1) {
-			  skybox->draw(shaderID, projection, view);
+			  skybox->draw(shaderID, projection, drawView);
 		  }
 	  }
+
+
   }
 
 
@@ -833,7 +878,11 @@ public:
 	int b_pressed = 0;
 	bool b_hasPressed = false;
 
-	glm::mat4 oldView;
+	glm::mat3 rotation;
+	glm::vec4 position;
+
+	glm::mat3 rRotation;
+	glm::vec4 rPosition;
 
   ExampleApp()
   {
@@ -858,7 +907,6 @@ protected:
 
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {
-
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
@@ -897,6 +945,10 @@ protected:
 				  b_pressed = (b_pressed + 1) % 4;
 				  std::cout << b_pressed << std::endl;
 				  b_hasPressed = true;
+
+				  glm::mat4 invHeadPose = glm::inverse(headPose);
+					rotation = glm::mat3(invHeadPose);
+					position = invHeadPose[3];
 			  }
 		  }
 
@@ -904,8 +956,8 @@ protected:
 			  b_hasPressed = false;
 		  }
 	  }
-	  
-	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed);
+	 
+	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed, rotation, position);
   }
 };
 
