@@ -1007,7 +1007,7 @@ public:
 
 };
 
-#include <queue> 
+#include <deque> 
 
 // An example application that renders a simple cube
 class ExampleApp : public RiftApp
@@ -1029,12 +1029,18 @@ public:
 	glm::mat3 rotation;
 	glm::vec4 position;
 
-	std::queue<glm::mat4> ringBuffer;
+	std::deque<glm::mat4> lringBuffer;
+	std::deque<glm::mat4> rringBuffer;
+	std::deque<glm::vec3> cringBuffer;
 	int lagNum = 0;
 
   ExampleApp()
   {
-
+	  while (ringBuffer.size < 30) {
+		  lringBuffer.push_back(glm::mat4(1.0f));
+		  rringBuffer.push_back(glm::mat4(1.0f));
+		  cringBuffer.push_back(glm::mat4(1.0f));
+	  }
   }
 
 protected:
@@ -1055,10 +1061,18 @@ protected:
 
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
   {	  
-	  //if (ringBuffer.size == 30)
-	//ringBuffer.push(projection);
+	  if (whichEye == 0) {
+		  lringBuffer.pop_front();
+		  lringBuffer.push_back(headPose);
+	  }
+
+	  if (whichEye == 1) {
+		  rringBuffer.pop_front();
+		  rringBuffer.push_back(headPose);
+	  }
 
 
+	  //Rendering cursor
 	  double displayMidpointSeconds = ovr_GetPredictedDisplayTime(_session, 0);
 	  ovrTrackingState trackState = ovr_GetTrackingState(_session, displayMidpointSeconds, ovrTrue);
 
@@ -1074,10 +1088,11 @@ protected:
 
 	  ovrVector3f handPosition[2];
 	  handPosition[1] = handPoses[1].Position;
-
 	  vec3 right;
-
 	  right = vec3(handPosition[1].x, handPosition[1].y, handPosition[1].z);
+
+	  //Store the position of the cursor of the current frame
+	  cringBuffer.push_back(right);
 
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
@@ -1141,9 +1156,25 @@ protected:
 			  iodOffset = 0.0f;
 			  setIOD(iodOffset);
 		  }
+
+		  if (inputState.IndexTrigger[0] > 0.5f) {
+			  lagNum = (lagNum + 1) % 30;
+		  }
 	  }
 
-	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed, rotation, position, right);
+	  glm::mat4 frame;
+	  if (whichEye == 0) {
+		  frame = lringBuffer[lagNum];
+	  }
+
+	  if (whichEye == 1) {
+		  frame = rringBuffer[lagNum];
+	  }
+
+	  right = cringBuffer[lagNum];
+	  std::cout << lagNum << std::endl;
+
+	  scene->render(projection, glm::inverse(frame), whichEye, x_pressed, cubeScale, b_pressed, rotation, position, right);
   }
 };
 
