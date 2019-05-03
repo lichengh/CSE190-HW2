@@ -1024,6 +1024,12 @@ public:
 	int b_pressed = 0;
 	bool b_hasPressed = false;
 
+	bool leftIndexP = false;
+	bool rightIndexP = false;
+
+	bool leftThumbP = false;
+	bool rightThumbP = false;
+
 	float iodOffset = 0;
 
 	glm::mat3 rotation;
@@ -1037,10 +1043,10 @@ public:
 
   ExampleApp()
   {
-	  while (ringBuffer.size < 30) {
+	  for(int i = 0; i< 60; i++) {
 		  lringBuffer.push_back(glm::mat4(1.0f));
 		  rringBuffer.push_back(glm::mat4(1.0f));
-		  cringBuffer.push_back(glm::mat4(1.0f));
+		  cringBuffer.push_back(glm::vec3(1.0f));
 	  }
   }
 
@@ -1092,6 +1098,7 @@ protected:
 	  vec3 right;
 	  right = vec3(handPosition[1].x, handPosition[1].y, handPosition[1].z);
 
+	  cringBuffer.pop_front();
 	  //Store the position of the cursor of the current frame
 	  cringBuffer.push_back(right);
 
@@ -1159,42 +1166,74 @@ protected:
 		  }
 
 		  if (inputState.IndexTrigger[0] > 0.5f) {
-			  lagNum = (lagNum + 1) % 30;
+
+			  if (!leftIndexP) {
+				  lagNum = (lagNum + 1) % 60;
+				  std::cout << lagNum << std::endl;
+				  leftIndexP = true;
+			  }
+		  }
+
+		  if (inputState.IndexTrigger[0]<= 0.5f && leftIndexP) {
+			  leftIndexP = false;
 		  }
 
 		  if (inputState.IndexTrigger[1] > 0.5f) {
-			  lagNum = (lagNum - 1) % 30;
+
+			  if (!rightIndexP & lagNum > 0) {
+				  lagNum = (lagNum - 1) % 60;
+				  std::cout << lagNum << std::endl;
+				  rightIndexP = true;
+			  }
+		  }
+
+		  if (inputState.IndexTrigger[1] <=0.5f && rightIndexP) {
+			  rightIndexP = false;
 		  }
 
 		  if (inputState.HandTrigger[0] > 0.5f) {
-			  delayNum = delayNum + 1;
+			  
+			  if (!leftThumbP) {
+				  delayNum = delayNum + 1;
+				  std::cout << delayNum << std::endl;
+			  }
 
 			  if (delayNum >= 10) {
 				  delayNum = 10;
 			  }
 		  }
 
+		  if (inputState.HandTrigger[0] <= 0.5f && leftThumbP) {
+			  leftThumbP = true;
+		  }
+
 		  if (inputState.HandTrigger[1] > 0.5f) {
-			  delayNum = delayNum - 1;
+
+			  if (!rightThumbP && delayNum > 0) {
+				  delayNum = delayNum - 1;
+				  std::cout << delayNum << std::endl;
+			  }
 
 			  if (delayNum <= 0) {
 				  delayNum = 0;
 			  }
 		  }
+
+		  if (inputState.HandTrigger[1] <= 0.5f && rightThumbP) {
+			  rightThumbP = true;
+		  }
 	  }
 
-	  glm::mat4 frame;
+	  glm::mat4 lagFrame;
 	  if (whichEye == 0) {
-		  frame = lringBuffer[lagNum];
+		  lagFrame = lringBuffer[60-lagNum-1];
 	  }
 
 	  if (whichEye == 1) {
-		  frame = rringBuffer[lagNum];
+		  lagFrame = rringBuffer[60-lagNum-1];
 	  }
 
-	  right = cringBuffer[lagNum];
-	  std::cout << lagNum << std::endl;
-	  std::cout << delayNum << std::endl;
+	  right = cringBuffer[60-lagNum-1];
 
 	  scene->render(projection, glm::inverse(frame), whichEye, x_pressed, cubeScale, b_pressed, rotation, position, right);
   }
