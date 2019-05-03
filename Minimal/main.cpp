@@ -484,12 +484,7 @@ public:
 	ovrInputState inputState;
 	int a_pressed = 0;
 	bool a_hasPressed = false;
-
-	int b_pressed = 0;
-	bool b_hasPressed = false;
-	glm::mat4 oldView;
-	glm::quat oldRotation;
-	glm::vec4 oldPostion;
+	float iod;
 
 private:
   GLuint _fbo{0};
@@ -536,9 +531,27 @@ public:
       _renderTargetSize.y = std::max(_renderTargetSize.y, (uint32_t)eyeSize.h);
       _renderTargetSize.x += eyeSize.w;
     });
+
+	//Set default value of iod in the constructor of RiftApp
+	iod = std::abs(_viewScaleDesc.HmdToEyePose[0].Position.x - _viewScaleDesc.HmdToEyePose[1].Position.x);
+	std::cout << iod << std::endl;
     // Make the on screen window 1/4 the resolution of the render target
     _mirrorSize = _renderTargetSize;
     _mirrorSize /= 4;
+  }
+
+  void setIOD(float iodOffset) {
+	   float newIOD = iod + iodOffset;
+	
+	  if (newIOD < -0.1f) {
+		  newIOD = -0.1f;
+	  }
+
+	  if (newIOD > 0.3f) {
+		  newIOD = 0.3f;
+	  }
+	  _viewScaleDesc.HmdToEyePose[0].Position.x = -newIOD / 2.0f;
+	  _viewScaleDesc.HmdToEyePose[1].Position.x = newIOD / 2.0f;
   }
 
 protected:
@@ -635,7 +648,6 @@ protected:
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, _fbo);
     glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, curTexId, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    
 
 	if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	{
@@ -878,11 +890,10 @@ public:
 	int b_pressed = 0;
 	bool b_hasPressed = false;
 
+	float iodOffset = 0;
+
 	glm::mat3 rotation;
 	glm::vec4 position;
-
-	glm::mat3 rRotation;
-	glm::vec4 rPosition;
 
   ExampleApp()
   {
@@ -955,11 +966,28 @@ protected:
 		  if (!(inputState.Buttons & ovrButton_B) & b_hasPressed) {
 			  b_hasPressed = false;
 		  }
+
+		  if (inputState.Thumbstick[ovrHand_Right].x) {
+			  iodOffset = iodOffset + inputState.Thumbstick[ovrHand_Right].x / 100.0f;
+			  /*
+			  if ((iodOffset + iod) < -0.1f) {
+
+			  }*/
+			  setIOD(iodOffset);
+		  }
 	  }
 	 
 	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed, rotation, position);
   }
 };
+
+#define OGLPLUS_USE_GLCOREARB_H 0
+#define OGLPLUS_USE_GLEW 1
+#define OGLPLUS_USE_BOOST_CONFIG 0
+#define OGLPLUS_NO_SITE_CONFIG 1
+#define OGLPLUS_LOW_PROFILE 1
+
+#include <oglplus/shapes/sphere.hpp>
 
 // Execute our example class
 int main(int argc, char** argv)
