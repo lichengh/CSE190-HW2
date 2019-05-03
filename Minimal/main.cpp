@@ -1033,6 +1033,7 @@ public:
 	std::deque<glm::mat4> rringBuffer;
 	std::deque<glm::vec3> cringBuffer;
 	int lagNum = 0;
+	int delayNum = 0;
 
   ExampleApp()
   {
@@ -1099,7 +1100,7 @@ protected:
 		  if (inputState.Buttons & ovrButton_X) {
 
 			  if (!x_hasPressed) {
-				  x_pressed = (x_pressed + 1) % 3;
+				  x_pressed = (x_pressed + 1) % 3; 
 				  std::cout << x_pressed << std::endl;
 				  x_hasPressed = true;
 			  }
@@ -1131,11 +1132,11 @@ protected:
 			  if (!b_hasPressed) {
 				  b_pressed = (b_pressed + 1) % 4;
 				  std::cout << b_pressed << std::endl;
-				  b_hasPressed = true;
 
-				  glm::mat4 invHeadPose = glm::inverse(headPose);
+					glm::mat4 invHeadPose = glm::inverse(headPose);
 					rotation = glm::mat3(invHeadPose);
 					position = invHeadPose[3];
+					b_hasPressed = true;
 			  }
 		  }
 
@@ -1160,6 +1161,26 @@ protected:
 		  if (inputState.IndexTrigger[0] > 0.5f) {
 			  lagNum = (lagNum + 1) % 30;
 		  }
+
+		  if (inputState.IndexTrigger[1] > 0.5f) {
+			  lagNum = (lagNum - 1) % 30;
+		  }
+
+		  if (inputState.HandTrigger[0] > 0.5f) {
+			  delayNum = delayNum + 1;
+
+			  if (delayNum >= 10) {
+				  delayNum = 10;
+			  }
+		  }
+
+		  if (inputState.HandTrigger[1] > 0.5f) {
+			  delayNum = delayNum - 1;
+
+			  if (delayNum <= 0) {
+				  delayNum = 0;
+			  }
+		  }
 	  }
 
 	  glm::mat4 frame;
@@ -1173,6 +1194,7 @@ protected:
 
 	  right = cringBuffer[lagNum];
 	  std::cout << lagNum << std::endl;
+	  std::cout << delayNum << std::endl;
 
 	  scene->render(projection, glm::inverse(frame), whichEye, x_pressed, cubeScale, b_pressed, rotation, position, right);
   }
