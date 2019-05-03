@@ -727,11 +727,75 @@ protected:
 // application would perform whatever rendering you want
 //
 
+#define OGLPLUS_USE_GLCOREARB_H 0
+#define OGLPLUS_USE_GLEW 1
+#define OGLPLUS_USE_BOOST_CONFIG 0
+#define OGLPLUS_NO_SITE_CONFIG 1
+#define OGLPLUS_LOW_PROFILE 1
+
+#pragma warning( disable : 4068 4244 4267 4065)
+#include <oglplus/config/basic.hpp>
+#include <oglplus/config/gl.hpp>
+#include <oglplus/all.hpp>
+#include <oglplus/interop/glm.hpp>
+#include <oglplus/bound/texture.hpp>
+#include <oglplus/bound/framebuffer.hpp>
+#include <oglplus/bound/renderbuffer.hpp>
+#include <oglplus/bound/buffer.hpp>
+#include <oglplus/shapes/sphere.hpp>
+#include <oglplus/shapes/wrapper.hpp>
+#pragma warning( default : 4068 4244 4267 4065)
+
+
 #include <vector>
 #include "shader.h"
 #include "Cube.h"
 
-// a class for building and rendering cubes
+namespace Attribute {
+	enum {
+		Position = 0,
+		TexCoord0 = 1,
+		Normal = 2,
+		Color = 3,
+		TexCoord1 = 4,
+		InstanceTransform = 5,
+	};
+}
+
+static const char * VERTEX_SHADER = R"SHADER(
+#version 410 core
+
+uniform mat4 ProjectionMatrix = mat4(1);
+uniform mat4 ViewMatrix = mat4(1);
+uniform mat4 ModelMatrix = mat4(1);
+
+layout(location = 0) in vec4 Position;
+layout(location = 1) in vec3 Normal;
+
+out vec3 vertNormal;
+
+void main(void) {
+   vertNormal = Normal;
+   gl_Position = ProjectionMatrix * ViewMatrix * ModelMatrix * Position;
+}
+)SHADER";
+
+static const char * FRAGMENT_SHADER = R"SHADER(
+#version 410 core
+
+uniform vec4 color = vec4(1);
+in vec3 vertNormal;
+out vec4 fragColor;
+
+void main(void) {
+    fragColor = color;
+}
+)SHADER";
+
+
+using namespace oglplus;
+// a class for encapsulating building and rendering an RGB cube
+
 class Scene
 {
   // Program
@@ -744,13 +808,63 @@ class Scene
   std::unique_ptr<Skybox> skybox_right;
 
   const unsigned int GRID_SIZE{5};
-  glm::mat4 ldrawView;
-  glm::mat4 rdrawView;
+
   glm::mat4 drawView;
 
+  //for render sphere
+  Program prog;
+  shapes::Sphere makeSphere;
+  shapes::DrawingInstructions sphereInstr;
+  shapes::Sphere::IndexArray sphereIndices;
+  VertexArray sphere;
+  Buffer vertices, normals;
+
+  vec3 center = vec3(0.0f, 0.0f, -0.5f);
+  vec3 lowerleft = center - vec3(0.14f) * 2.0f;
+  std::vector<vec3> sphereLocs;
+
 public:
-	Scene()
+	Scene() : sphereInstr(makeSphere.Instructions()), sphereIndices(makeSphere.Indices())
 	{
+
+		try {
+			// attach the shaders to the program
+			prog.AttachShader(
+				FragmentShader()
+				.Source(GLSLSource(String(FRAGMENT_SHADER)))
+				.Compile()
+			);
+			prog.AttachShader(
+				VertexShader()
+				.Source(GLSLSource(String(VERTEX_SHADER)))
+				.Compile()
+			);
+			prog.Link();
+		}
+		catch (ProgramBuildError & err) {
+			FAIL((const char*)err.what());
+		}
+
+		// link and use it
+		prog.Use();
+
+		sphere.Bind();
+		vertices.Bind(Buffer::Target::Array);
+		{
+			std::vector<GLfloat> data;
+			GLuint n_per_vertex = makeSphere.Positions(data);
+			Buffer::Data(Buffer::Target::Array, data);
+			(prog | 0).Setup<GLfloat>(n_per_vertex).Enable();
+		}
+
+		normals.Bind(Buffer::Target::Array);
+		{
+			std::vector<GLfloat> data;
+			GLuint n_per_vertex = makeSphere.Positions(data);
+			Buffer::Data(Buffer::Target::Array, data);
+			(prog | 1).Setup<GLfloat>(n_per_vertex).Enable();
+		}
+
 		// Create two cube
 		instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.3)));
 		instance_positions.push_back(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -0.9)));
@@ -768,10 +882,30 @@ public:
 
 		skybox->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
 		skybox_right->toWorld = glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
+
+
 	}
 
-  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed, const glm::mat3& rot, const glm::vec4& pos)
+	void renderSphere(const mat4 & model, const vec4 & color) {
+		prog.Use();
+		Uniform<mat4>(prog, "ModelMatrix").Set(model);
+		Uniform<vec4>(prog, "color").Set(color);
+		sphere.Bind();
+		sphereInstr.Draw(sphereIndices);
+	}
+
+  void render(const glm::mat4& projection, const glm::mat4& view, const int whichEye, const int x_pressed, const float cubeScale, const int b_pressed, const glm::mat3& rot, const glm::vec4& pos, const vec3 & right)
   {
+
+	  // render cursor
+	  mat4 S = glm::scale(vec3(0.07 / 2.0f));
+	  mat4 rightCursor = glm::translate(mat4(1), right) * S;
+
+
+	  vec4 rightCursorCorlor = vec4(0, 0, 1, 0);
+
+	  renderSphere(rightCursor, rightCursorCorlor);
+
 	  if (b_pressed == 0) {
 		  //ldrawView = view;
 		  //rdrawView = view;
@@ -869,11 +1003,11 @@ public:
 		  }
 	  }
 
-
   }
 
-
 };
+
+#include <queue> 
 
 // An example application that renders a simple cube
 class ExampleApp : public RiftApp
@@ -894,6 +1028,9 @@ public:
 
 	glm::mat3 rotation;
 	glm::vec4 position;
+
+	std::queue<glm::mat4> ringBuffer;
+	int lagNum = 0;
 
   ExampleApp()
   {
@@ -917,7 +1054,31 @@ protected:
   }
 
   void renderScene(const glm::mat4& projection, const glm::mat4& headPose, const int whichEye) override
-  {
+  {	  
+	  //if (ringBuffer.size == 30)
+	//ringBuffer.push(projection);
+
+
+	  double displayMidpointSeconds = ovr_GetPredictedDisplayTime(_session, 0);
+	  ovrTrackingState trackState = ovr_GetTrackingState(_session, displayMidpointSeconds, ovrTrue);
+
+	  unsigned int handStatus[2];
+	  handStatus[0] = trackState.HandStatusFlags[0];
+	  handStatus[1] = trackState.HandStatusFlags[1];
+
+	  ovrPosef handPoses[2];  // These are position and orientation in meters in room coordinates, relative to tracking origin. Right-handed cartesian coordinates.
+								// ovrQuatf     Orientation;
+								// ovrVector3f  Position;
+
+	  handPoses[1] = trackState.HandPoses[1].ThePose;
+
+	  ovrVector3f handPosition[2];
+	  handPosition[1] = handPoses[1].Position;
+
+	  vec3 right;
+
+	  right = vec3(handPosition[1].x, handPosition[1].y, handPosition[1].z);
+
 	  if (OVR_SUCCESS(ovr_GetInputState(_session, ovrControllerType_Touch, &inputState)))
 	  {
 		  if (inputState.Buttons & ovrButton_X) {
@@ -975,19 +1136,17 @@ protected:
 			  }*/
 			  setIOD(iodOffset);
 		  }
+
+		  if (inputState.Buttons & ovrButton_RThumb) {
+			  iodOffset = 0.0f;
+			  setIOD(iodOffset);
+		  }
 	  }
-	 
-	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed, rotation, position);
+
+	  scene->render(projection, glm::inverse(headPose), whichEye, x_pressed, cubeScale, b_pressed, rotation, position, right);
   }
 };
 
-#define OGLPLUS_USE_GLCOREARB_H 0
-#define OGLPLUS_USE_GLEW 1
-#define OGLPLUS_USE_BOOST_CONFIG 0
-#define OGLPLUS_NO_SITE_CONFIG 1
-#define OGLPLUS_LOW_PROFILE 1
-
-#include <oglplus/shapes/sphere.hpp>
 
 // Execute our example class
 int main(int argc, char** argv)
